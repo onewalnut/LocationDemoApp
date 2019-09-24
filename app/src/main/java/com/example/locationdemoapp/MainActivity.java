@@ -1,7 +1,17 @@
 package com.example.locationdemoapp;
 
 import android.Manifest;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
 import android.support.v4.app.ActivityCompat;
@@ -11,40 +21,98 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
+import com.alibaba.fastjson.JSONObject;
 
+import java.io.*;
+import java.net.InetAddress;
+import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static String IP = "192.168.137.1";
+    private final String TAG = "MainActivity";
+    private static String IP = "192.168.12.154";
+    private static int PORT = 8888;
     private WifiManager wifiManager;
+    private static double X;
+    private static double Y;
     List<ScanResult> scanResult;
-    TextView status;
+    TextView status, xCordText, yCordText;
     boolean isStart = false;
     String[] apForLocation = {"A8:57:4E:2D:D7:2C", "B0:89:00:E3:25:10", "14:E6:E4:2E:0B:5C", "48:8A:D2:0B:C5:54"};
     List<String> ap_Name = new ArrayList<>();
+    Socket wifiSocket;
+    ImageView imageView;
+    Paint paint;
+    Bitmap bitmap;
+    Canvas canvas;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         getPermission();
+        initSocket();
         status = findViewById(R.id.status);
+        xCordText = findViewById(R.id.x_cor);
+        yCordText = findViewById(R.id.y_cor);
+        imageView = findViewById(R.id.bg);
+        paint = new Paint();
+        paint.setColor(Color.RED);
         wifiManager = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
         for (int i = 0; i < apForLocation.length; i ++) {
             ap_Name.add(apForLocation[i]);
         }
+        IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction("UPDATE_XY");
+        MyBroadcastReceiver myBroadcastReceiver = new MyBroadcastReceiver();
+        registerReceiver(myBroadcastReceiver, intentFilter);
     }
+
+
+    private class MyBroadcastReceiver extends BroadcastReceiver {
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            double xRatio = X / 1150;  //计算出实际xy坐标相对于整个地图的比例
+            double yRation = Y / 648;
+            double xCor = imageView.getHeight() - (yRation * imageView.getHeight());  //xy坐标需要转换，服务端传来的坐标是基于横向地图的，客户端是纵向的地图，原点坐标变了。
+            double yCor = xRatio * imageView.getWidth();
+            xCordText.setText("X坐标：" + String.format("%.2f", xCor));
+            yCordText.setText("Y坐标：" + String.format("%.2f", yCor));
+            bitmap = Bitmap.createBitmap(imageView.getWidth(), imageView.getHeight(), Bitmap.Config.ARGB_8888);
+            canvas = new Canvas(bitmap);
+            paint.setStrokeWidth(40);
+            canvas.drawPoint((float) xCor, (float) yCor, paint);
+            imageView.setImageBitmap(bitmap);
+        }
+    }
+
+    private void initSocket() {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    wifiSocket = new Socket(IP, PORT);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }).start();
+    }
+
 
     public void startLocaion(View view) {
         if (isStart != true) {
             isStart = true;
             Toast.makeText(getApplicationContext(), "App Start!", Toast.LENGTH_SHORT).show();
             status.setText("状态：定位中");
-            new Thread(new startLocationThread()).start();
+            new Thread(new StartLocationThread()).start();
+            new Thread(new GetCoordinateThread()).start();
         }
     }
 
@@ -56,22 +124,78 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    class startLocationThread implements Runnable {
+    class GetCoordinateThread implements Runnable {
+
+        BufferedReader coordinate;
+        Intent intent;
+
+        GetCoordinateThread() {
+            {
+                try {
+                    coordinate = new BufferedReader(new InputStreamReader(wifiSocket.getInputStream()));
+                    intent = new Intent("UPDATE_XY");
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
 
         @Override
         public void run() {
             while (isStart) {
                 try {
-                    Thread.sleep(15000);
+                    String str = null;
+                    JSONObject jsonObject;
+                    while ((str = coordinate.readLine()) != null) {
+                        jsonObject = JSONObject.parseObject(str);
+                        X = Double.parseDouble(jsonObject.get("x").toString());
+                        Y = Double.parseDouble(jsonObject.get("y").toString());
+                        sendBroadcast(intent);
+                        System.out.println(jsonObject.toJSONString());
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
+            }
+        }
+    }
+
+    class StartLocationThread implements Runnable {
+
+        BufferedWriter wifiOut;
+
+        StartLocationThread() {
+            try {
+                wifiOut = new BufferedWriter(new OutputStreamWriter(wifiSocket.getOutputStream()));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        @Override
+        public void run() {
+            while (isStart) {
+                try {
                     wifiManager.startScan();
                     scanResult = wifiManager.getScanResults();
-                    StringBuilder stringBuilder = new StringBuilder();
-                    for (ScanResult sc : scanResult) {
-                        if (ap_Name.contains(sc.BSSID.toUpperCase())) {
-                            stringBuilder.append(sc.SSID + " : " + sc.BSSID + " : " + sc.level + System.getProperty("line.separator"));
-                        }
-                    }
+                    JSONObject jsonObject = new JSONObject();
+//                    for (ScanResult sc : scanResult) {
+//                        if (ap_Name.contains(sc.BSSID.toUpperCase())) {
+//                            stringBuilder.append(sc.SSID + " : " + sc.BSSID + " : " + sc.level + System.getProperty("line.separator"));
+//                            jsonObject.put(sc.BSSID.toUpperCase(), sc.level);
+//                        }
+//                    }
+                    jsonObject.put("48:8A:D2:0B:C5:54", "-57");
+                    jsonObject.put("A8:57:4E:2D:D7:2C", "-40");
+                    jsonObject.put("B0:89:00:E3:25:10", "-38");
+                    wifiOut.write(jsonObject.toJSONString() + "\r\n");
+                    System.out.println(jsonObject.toJSONString());
+                    wifiOut.flush();
+                    Thread.sleep(1000);
                 } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } catch (IOException e) {
                     e.printStackTrace();
                 }
             }
