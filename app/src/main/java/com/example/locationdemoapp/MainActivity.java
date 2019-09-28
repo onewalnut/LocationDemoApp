@@ -35,7 +35,7 @@ import java.util.List;
 public class MainActivity extends AppCompatActivity {
 
     private final String TAG = "MainActivity";
-    private static String IP = "192.168.12.154";
+    private static String IP = "192.168.3.10";
     private static int PORT = 8888;
     private WifiManager wifiManager;
     private static double X;
@@ -180,15 +180,14 @@ public class MainActivity extends AppCompatActivity {
                     wifiManager.startScan();
                     scanResult = wifiManager.getScanResults();
                     JSONObject jsonObject = new JSONObject();
-//                    for (ScanResult sc : scanResult) {
-//                        if (ap_Name.contains(sc.BSSID.toUpperCase())) {
-//                            stringBuilder.append(sc.SSID + " : " + sc.BSSID + " : " + sc.level + System.getProperty("line.separator"));
-//                            jsonObject.put(sc.BSSID.toUpperCase(), sc.level);
-//                        }
-//                    }
-                    jsonObject.put("48:8A:D2:0B:C5:54", "-57");
-                    jsonObject.put("A8:57:4E:2D:D7:2C", "-40");
-                    jsonObject.put("B0:89:00:E3:25:10", "-38");
+                    for (ScanResult sc : scanResult) {
+                        if (ap_Name.contains(sc.BSSID.toUpperCase())) {
+                            jsonObject.put(sc.BSSID.toUpperCase(), sc.level);
+                        }
+                    }
+//                    jsonObject.put("48:8A:D2:0B:C5:54", "-57");
+//                    jsonObject.put("A8:57:4E:2D:D7:2C", "-40");
+//                    jsonObject.put("B0:89:00:E3:25:10", "-38");
                     wifiOut.write(jsonObject.toJSONString() + "\r\n");
                     System.out.println(jsonObject.toJSONString());
                     wifiOut.flush();
