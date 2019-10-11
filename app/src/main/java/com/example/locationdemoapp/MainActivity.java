@@ -35,13 +35,13 @@ import java.util.List;
 public class MainActivity extends AppCompatActivity {
 
     private final String TAG = "MainActivity";
-    private static String IP = "192.168.3.10";
+    private static String IP = "192.168.12.154";
     private static int PORT = 8888;
     private WifiManager wifiManager;
     private static double X;
     private static double Y;
     List<ScanResult> scanResult;
-    TextView status, xCordText, yCordText;
+    TextView status, xCordText, yCordText, rssi;
     boolean isStart = false;
     String[] apForLocation = {"A8:57:4E:2D:D7:2C", "B0:89:00:E3:25:10", "14:E6:E4:2E:0B:5C", "48:8A:D2:0B:C5:54"};
     List<String> ap_Name = new ArrayList<>();
@@ -60,6 +60,7 @@ public class MainActivity extends AppCompatActivity {
         status = findViewById(R.id.status);
         xCordText = findViewById(R.id.x_cor);
         yCordText = findViewById(R.id.y_cor);
+        rssi = findViewById(R.id.rssi);
         imageView = findViewById(R.id.bg);
         paint = new Paint();
         paint.setColor(Color.RED);
@@ -71,8 +72,21 @@ public class MainActivity extends AppCompatActivity {
         intentFilter.addAction("UPDATE_XY");
         MyBroadcastReceiver myBroadcastReceiver = new MyBroadcastReceiver();
         registerReceiver(myBroadcastReceiver, intentFilter);
+        IntentFilter updateRssiFilter = new IntentFilter();
+        updateRssiFilter.addAction("UPDATE_RSSI");
+        UpdateRssi updateRssi = new UpdateRssi();
+        registerReceiver(updateRssi, updateRssiFilter);
     }
 
+    private class UpdateRssi extends BroadcastReceiver {
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            String r = intent.getStringExtra("RSSI");
+            rssi.setText(r);
+        }
+    }
 
     private class MyBroadcastReceiver extends BroadcastReceiver {
 
@@ -164,10 +178,12 @@ public class MainActivity extends AppCompatActivity {
     class StartLocationThread implements Runnable {
 
         BufferedWriter wifiOut;
+        Intent intent;
 
         StartLocationThread() {
             try {
                 wifiOut = new BufferedWriter(new OutputStreamWriter(wifiSocket.getOutputStream()));
+                intent = new Intent("UPDATE_RSSI");
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -180,14 +196,21 @@ public class MainActivity extends AppCompatActivity {
                     wifiManager.startScan();
                     scanResult = wifiManager.getScanResults();
                     JSONObject jsonObject = new JSONObject();
-                    for (ScanResult sc : scanResult) {
-                        if (ap_Name.contains(sc.BSSID.toUpperCase())) {
-                            jsonObject.put(sc.BSSID.toUpperCase(), sc.level);
-                        }
+//                    for (ScanResult sc : scanResult) {
+//                        if (ap_Name.contains(sc.BSSID.toUpperCase())) {
+//                            jsonObject.put(sc.BSSID.toUpperCase(), sc.level);
+//                        }
+//                    }
+                    jsonObject.put("48:8A:D2:0B:C5:54", "-57");
+                    jsonObject.put("A8:57:4E:2D:D7:2C", "-40");
+                    jsonObject.put("B0:89:00:E3:25:10", "-38");
+                    StringBuilder stringBuilder = new StringBuilder();
+                    for (int i = 0; i < apForLocation.length; i ++) {
+                        String rssi = (String) jsonObject.get(apForLocation[i]);
+                        stringBuilder.append(rssi + " ");
                     }
-//                    jsonObject.put("48:8A:D2:0B:C5:54", "-57");
-//                    jsonObject.put("A8:57:4E:2D:D7:2C", "-40");
-//                    jsonObject.put("B0:89:00:E3:25:10", "-38");
+                    intent.putExtra("RSSI", stringBuilder.toString());
+                    sendBroadcast(intent);
                     wifiOut.write(jsonObject.toJSONString() + "\r\n");
                     System.out.println(jsonObject.toJSONString());
                     wifiOut.flush();
