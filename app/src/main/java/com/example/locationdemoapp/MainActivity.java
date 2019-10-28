@@ -35,7 +35,7 @@ import java.util.List;
 public class MainActivity extends AppCompatActivity {
 
     private final String TAG = "MainActivity";
-    private static String IP = "192.168.12.154";
+    private static String IP = "192.168.3.10";
     private static int PORT = 8888;
     private WifiManager wifiManager;
     private static double X;
@@ -43,7 +43,7 @@ public class MainActivity extends AppCompatActivity {
     List<ScanResult> scanResult;
     TextView status, xCordText, yCordText, rssi;
     boolean isStart = false;
-    String[] apForLocation = {"A8:57:4E:2D:D7:2C", "B0:89:00:E3:25:10", "14:E6:E4:2E:0B:5C", "48:8A:D2:0B:C5:54"};
+    String[] apForLocation = {"48:8A:D2:0B:C5:54", "A8:57:4E:2D:D7:2C", "B0:89:00:E3:25:10", "C0:A5:DD:01:3C:80"};
     List<String> ap_Name = new ArrayList<>();
     Socket wifiSocket;
     ImageView imageView;
@@ -196,17 +196,18 @@ public class MainActivity extends AppCompatActivity {
                     wifiManager.startScan();
                     scanResult = wifiManager.getScanResults();
                     JSONObject jsonObject = new JSONObject();
-//                    for (ScanResult sc : scanResult) {
-//                        if (ap_Name.contains(sc.BSSID.toUpperCase())) {
-//                            jsonObject.put(sc.BSSID.toUpperCase(), sc.level);
-//                        }
-//                    }
-                    jsonObject.put("48:8A:D2:0B:C5:54", "-57");
-                    jsonObject.put("A8:57:4E:2D:D7:2C", "-40");
-                    jsonObject.put("B0:89:00:E3:25:10", "-38");
+                    for (ScanResult sc : scanResult) {
+                        if (ap_Name.contains(sc.BSSID.toUpperCase())) {
+                            jsonObject.put(sc.BSSID.toUpperCase(), sc.level);
+                        }
+                    }
+//                    jsonObject.put("48:8A:D2:0B:C5:54", "-38");
+//                    jsonObject.put("A8:57:4E:2D:D7:2C", "-43");
+//                    jsonObject.put("B0:89:00:E3:25:10", "-40");
+//                    jsonObject.put("C0:A5:DD:01:3C:80", "-25");
                     StringBuilder stringBuilder = new StringBuilder();
                     for (int i = 0; i < apForLocation.length; i ++) {
-                        String rssi = (String) jsonObject.get(apForLocation[i]);
+                        String rssi = String.valueOf(jsonObject.get(apForLocation[i]));
                         stringBuilder.append(rssi + " ");
                     }
                     intent.putExtra("RSSI", stringBuilder.toString());
